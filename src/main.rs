@@ -148,7 +148,7 @@ impl GameState for State {
             }
         }
         
-        ctx.print(1,1,"Roguelike Test");
+        ctx.print_color(1,1,RGB::named(BLUE),RGB::named(BLACK), "Roguelike Test");
         
         //Generer player
         ctx.print_color(
@@ -173,8 +173,8 @@ fn main() -> BError {
          
     //Initialiser (Joueur au millieu)
     let gs = State{
-        player_x: 40,
-        player_y: 25,
+        player_x: px,
+        player_y: py,
         map: map_gen
     };
     
