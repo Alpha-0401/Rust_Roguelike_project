@@ -13,7 +13,7 @@ impl GameState for State {
         
         //Lire clavier
         if let Some(key) = ctx.key{
-        println!("Tecla presionada: {:?}", key);
+        //println!("Tecla presionada: {:?}", key);
             match key{
                 // Mouvement vers la gauche (Q/A)
                 VirtualKeyCode::Left => self.player_x -= 1,
@@ -26,6 +26,9 @@ impl GameState for State {
                 // Ignorer le rest
                 _ => {}
             }
+            //.clamp(min,max) assure que les limites des valeurs
+            self.player_x = self.player_x.clamp(0, 79);
+            self.player_y = self.player_y.clamp(0, 49);
         }
         
         //Nettoyer écran à chaque frame
