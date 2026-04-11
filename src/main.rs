@@ -6,6 +6,7 @@ use std::cmp::{max, min};
 enum TileType {
     Wall,
     Floor,
+    Stairs,
 }
 
 // Fonction pour grille 1D
@@ -40,7 +41,7 @@ fn gen_vertical_tunnel(map: &mut [TileType], y1: i32, y2: i32, x: i32) {
     }
 }
 
-fn new_map() -> (Vec<TileType>, i32, i32) {
+fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32) {
     let mut map = vec![TileType::Wall; 80 * 50];
     let mut rooms: Vec<Rect> = Vec::new();
     let mut rng = RandomNumberGenerator::new();
@@ -88,6 +89,13 @@ fn new_map() -> (Vec<TileType>, i32, i32) {
             rooms.push(new_room);
         }
     }
+    
+    // Placer les escaliers dans la dernière salle générée (si niveau < 3)
+    if map_depth < 3 {
+        let last_room_center = rooms[rooms.len() - 1].center();
+        let stairs_idx = xy_idx(last_room_center.x, last_room_center.y);
+        map[stairs_idx] = TileType::Stairs;
+    }
 
     (map, player_x, player_y)
 }
@@ -97,6 +105,7 @@ struct State {
     player_x: i32,
     player_y: i32,
     map: Vec<TileType>,
+    map_depth: i32,
     }
 
 //Boucle principale
@@ -115,6 +124,23 @@ impl GameState for State {
                 VirtualKeyCode::Right => new_x += 1,
                 VirtualKeyCode::Up => new_y -= 1,
                 VirtualKeyCode::Down => new_y += 1,
+                
+                // Action pour descendre l'escalier
+                VirtualKeyCode::Space => {
+                    let player_idx = xy_idx(self.player_x, self.player_y);
+                    if self.map[player_idx] == TileType::Stairs {
+                        self.map_depth += 1; // On descend d'un niveau
+                        
+                        // Générer la nouvelle carte
+                        let (new_m, new_px, new_py) = new_map(self.map_depth);
+                        
+                        // Mettre à jour l'état du jeu
+                        self.map = new_m;
+                        new_x = new_px;
+                        new_y = new_py;
+                    }
+                }
+                
                 // Ignorer le rest
                 _ => {}
             }
@@ -145,10 +171,15 @@ impl GameState for State {
                 TileType::Wall => {
                     ctx.print_color(x, y, RGB::named(GRAY), RGB::named(BLACK), "#");
                 }
+                TileType::Stairs => {
+                    // Dessiner l'escalier avec le symbole '>'
+                    ctx.print_color(x, y, RGB::named(RED), RGB::named(BLACK), ">");
+                }
             }
         }
         
         ctx.print_color(1,1,RGB::named(BLUE),RGB::named(BLACK), "Roguelike Test");
+        ctx.print_color(1, 2, RGB::named(WHITE), RGB::named(BLACK), &format!("P{}", self.map_depth));
         
         //Generer player
         ctx.print_color(
@@ -169,13 +200,15 @@ fn main() -> BError {
         .build()?;
         
     //Generation map
-    let (map_gen, px, py) = new_map();
+    let depth = 1;
+    let (map_gen, px, py) = new_map(depth);
          
     //Initialiser (Joueur au millieu)
     let gs = State{
         player_x: px,
         player_y: py,
-        map: map_gen
+        map: map_gen,
+        map_depth: depth,
     };
     
     main_loop(context,gs)
