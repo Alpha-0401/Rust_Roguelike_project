@@ -184,8 +184,8 @@ impl GameState for State {
                         // Mettre à jour l'état du jeu
                         self.map = new_m;
                         self.enemies = new_enemies;
-                        new_x = new_px;
-                        new_y = new_py;
+                        self.player_x = new_px;
+                        self.player_y = new_py;
                     } else if self.map[player_idx] == TileType::Goal {
                         // On a atteint sortie
                         self.game_won = true;
