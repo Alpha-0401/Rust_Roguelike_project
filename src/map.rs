@@ -43,7 +43,7 @@ fn gen_vertical_tunnel(map: &mut [TileType], y1: i32, y2: i32, x: i32) {
 }
 
 
-fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32, Vec<Point>) {
+pub fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32, Vec<Point>) {
     let mut map = vec![TileType::Wall; 80 * 50];
     let mut rooms: Vec<Rect> = Vec::new();
     let mut rng = RandomNumberGenerator::new();
