@@ -42,10 +42,11 @@ fn gen_vertical_tunnel(map: &mut [TileType], y1: i32, y2: i32, x: i32) {
     }
 }
 
-fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32) {
+fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32, Vec<Point>) {
     let mut map = vec![TileType::Wall; 80 * 50];
     let mut rooms: Vec<Rect> = Vec::new();
     let mut rng = RandomNumberGenerator::new();
+    let mut enemies: Vec<Point> = Vec::new();
 
     let mut player_x = 0;
     let mut player_y = 0;
@@ -74,6 +75,9 @@ fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32) {
                 let new_center = new_room.center();
                 let prev_center = rooms[rooms.len()-1].center();
                 
+                // Enemie au centre des salles
+                enemies.push(Point::new(new_center.x, new_center.y));
+                
                 let new_x = new_center.x;
                 let new_y = new_center.y;
                 let prev_x = prev_center.x;
@@ -95,14 +99,13 @@ fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32) {
     let target_idx = xy_idx(last_room_center.x, last_room_center.y);
     
     // Placer les escaliers dans la dernière salle générée (si niveau < 3)
-    
     if map_depth < 3 {
         map[target_idx] = TileType::Stairs;
     } else {
         map[target_idx] = TileType::Goal;
     }
 
-    (map, player_x, player_y)
+    (map, player_x, player_y, enemies)
 }
 
 //Définition de l'état du jeu (sauvegarde de coordonnées)
@@ -112,6 +115,8 @@ struct State {
     map: Vec<TileType>,
     map_depth: i32,
     game_won: bool,
+    hp: i32,
+    enemies: Vec<Point>,
     }
 
 //Boucle principale
@@ -126,11 +131,22 @@ impl GameState for State {
         // Si gagné, on affiche l'écran de victoire et on ignore le reste
         if self.game_won {
             ctx.print_color_centered(22, RGB::named(YELLOW), RGB::named(BLACK), "VICTOIRE !");
-            ctx.print_color_centered(24, RGB::named(WHITE), RGB::named(BLACK), "Vous avez trouve la sortie du donjon !");
+            ctx.print_color_centered(24, RGB::named(WHITE), RGB::named(BLACK), "Vous avez sortie du donjon !");
             ctx.print_color_centered(26, RGB::named(GRAY), RGB::named(BLACK), "Appuyez sur Echap (Esc) pour quitter.");
             
             if let Some(VirtualKeyCode::Escape) = ctx.key {
                 ctx.quit(); // Ferme le jeu
+            }
+            return;
+        }
+        
+        // Si hp = 0, Game Over
+        if self.hp <= 0 {
+            ctx.print_color_centered(22, RGB::named(RED), RGB::named(BLACK), "GAME OVER !");
+            ctx.print_color_centered(26, RGB::named(GRAY), RGB::named(BLACK), "Appuyez sur Echap (Esc) pour quitter.");
+            
+            if let Some(VirtualKeyCode::Escape) = ctx.key {
+                ctx.quit();
             }
             return;
         }
@@ -154,10 +170,11 @@ impl GameState for State {
                         self.map_depth += 1; // On descend d'un niveau
                         
                         // Générer la nouvelle carte
-                        let (new_m, new_px, new_py) = new_map(self.map_depth);
+                        let (new_m, new_px, new_py, new_enemies) = new_map(self.map_depth);
                         
                         // Mettre à jour l'état du jeu
                         self.map = new_m;
+                        self.enemies = new_enemies;
                         new_x = new_px;
                         new_y = new_py;
                     } else if self.map[player_idx] == TileType::Goal {
@@ -174,10 +191,25 @@ impl GameState for State {
             new_y = new_y.clamp(0, 49);
             
             // Collisions
-            let destination_idx = xy_idx(new_x, new_y);
-            if self.map[destination_idx] != TileType::Wall {
-                self.player_x = new_x;
-                self.player_y = new_y;
+            let mut hit_enemy = false;
+            self.enemies.retain(|enemy| {
+                if enemy.x == new_x && enemy.y == new_y {
+                    hit_enemy = true;
+                    false // Supprimer enemie si collision
+                } else {
+                    true
+                }
+            });
+
+            if hit_enemy {
+                self.hp -= 1; // Perdre 1 hp
+            } else {
+                // Collisions avec murs
+                let destination_idx = xy_idx(new_x, new_y);
+                if self.map[destination_idx] != TileType::Wall {
+                    self.player_x = new_x;
+                    self.player_y = new_y;
+                }
             }
         }
         
@@ -196,19 +228,23 @@ impl GameState for State {
                     ctx.print_color(x, y, RGB::named(GRAY), RGB::named(BLACK), "#");
                 }
                 TileType::Stairs => {
-                    // Dessiner l'escalier avec le symbole '>'
                     ctx.print_color(x, y, RGB::named(RED), RGB::named(BLACK), ">");
                 }
                 TileType::Goal => {
-                    // Dessiner la meta avec une étoile dorée
                     ctx.print_color(x, y, RGB::named(GOLD), RGB::named(BLACK), "*");
                 }
             }
         }
         
+        // Generer enemies
+        for enemy in self.enemies.iter() {
+            ctx.print_color(enemy.x, enemy.y, RGB::named(RED), RGB::named(BLACK), "x");
+        }
+        
         // HUD
         ctx.print_color(1,1,RGB::named(BLUE),RGB::named(BLACK), "Roguelike Test");
         ctx.print_color(1, 2, RGB::named(WHITE), RGB::named(BLACK), &format!("P{}", self.map_depth));
+        ctx.print_color(1, 3, RGB::named(RED), RGB::named(BLACK), &format!("HP: {}/3", self.hp));
         
         //Generer player
         ctx.print_color(
@@ -230,7 +266,7 @@ fn main() -> BError {
         
     //Generation map
     let depth = 1;
-    let (map_gen, px, py) = new_map(depth);
+    let (map_gen, px, py, enemies_gen) = new_map(depth);
          
     //Initialiser (Joueur au millieu)
     let gs = State{
@@ -239,6 +275,8 @@ fn main() -> BError {
         map: map_gen,
         map_depth: depth,
         game_won: false,
+        hp: 3,
+        enemies: enemies_gen,
     };
     
     main_loop(context,gs)
