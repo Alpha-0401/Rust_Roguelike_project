@@ -7,6 +7,7 @@ enum TileType {
     Wall,
     Floor,
     Stairs,
+    Goal,
 }
 
 // Fonction pour grille 1D
@@ -90,11 +91,15 @@ fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32) {
         }
     }
     
+    let last_room_center = rooms[rooms.len() - 1].center();
+    let target_idx = xy_idx(last_room_center.x, last_room_center.y);
+    
     // Placer les escaliers dans la dernière salle générée (si niveau < 3)
+    
     if map_depth < 3 {
-        let last_room_center = rooms[rooms.len() - 1].center();
-        let stairs_idx = xy_idx(last_room_center.x, last_room_center.y);
-        map[stairs_idx] = TileType::Stairs;
+        map[target_idx] = TileType::Stairs;
+    } else {
+        map[target_idx] = TileType::Goal;
     }
 
     (map, player_x, player_y)
@@ -106,12 +111,29 @@ struct State {
     player_y: i32,
     map: Vec<TileType>,
     map_depth: i32,
+    game_won: bool,
     }
 
 //Boucle principale
 impl GameState for State {
+
     //fonction pour mettre à jour
     fn tick(&mut self, ctx: &mut BTerm) {
+        
+        //Nettoyer écran à chaque frame
+        ctx.cls();
+        
+        // Si gagné, on affiche l'écran de victoire et on ignore le reste
+        if self.game_won {
+            ctx.print_color_centered(22, RGB::named(YELLOW), RGB::named(BLACK), "VICTOIRE !");
+            ctx.print_color_centered(24, RGB::named(WHITE), RGB::named(BLACK), "Vous avez trouve la sortie du donjon !");
+            ctx.print_color_centered(26, RGB::named(GRAY), RGB::named(BLACK), "Appuyez sur Echap (Esc) pour quitter.");
+            
+            if let Some(VirtualKeyCode::Escape) = ctx.key {
+                ctx.quit(); // Ferme le jeu
+            }
+            return;
+        }
         
         let mut new_x = self.player_x;
         let mut new_y = self.player_y;
@@ -125,7 +147,7 @@ impl GameState for State {
                 VirtualKeyCode::Up => new_y -= 1,
                 VirtualKeyCode::Down => new_y += 1,
                 
-                // Action pour descendre l'escalier
+                // Action pour descendre l'escalier ou sortie
                 VirtualKeyCode::Space => {
                     let player_idx = xy_idx(self.player_x, self.player_y);
                     if self.map[player_idx] == TileType::Stairs {
@@ -138,6 +160,9 @@ impl GameState for State {
                         self.map = new_m;
                         new_x = new_px;
                         new_y = new_py;
+                    } else if self.map[player_idx] == TileType::Goal {
+                        // On a atteint sortie
+                        self.game_won = true;
                     }
                 }
                 
@@ -156,8 +181,7 @@ impl GameState for State {
             }
         }
         
-        //Nettoyer écran à chaque frame
-        ctx.cls();
+        
         
         //Dessiner carte
         for (idx, tile) in self.map.iter().enumerate() {
@@ -175,9 +199,14 @@ impl GameState for State {
                     // Dessiner l'escalier avec le symbole '>'
                     ctx.print_color(x, y, RGB::named(RED), RGB::named(BLACK), ">");
                 }
+                TileType::Goal => {
+                    // Dessiner la meta avec une étoile dorée
+                    ctx.print_color(x, y, RGB::named(GOLD), RGB::named(BLACK), "*");
+                }
             }
         }
         
+        // HUD
         ctx.print_color(1,1,RGB::named(BLUE),RGB::named(BLACK), "Roguelike Test");
         ctx.print_color(1, 2, RGB::named(WHITE), RGB::named(BLACK), &format!("P{}", self.map_depth));
         
@@ -209,6 +238,7 @@ fn main() -> BError {
         player_y: py,
         map: map_gen,
         map_depth: depth,
+        game_won: false,
     };
     
     main_loop(context,gs)
