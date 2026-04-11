@@ -46,7 +46,8 @@ fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32, Vec<Point>) {
     let mut map = vec![TileType::Wall; 80 * 50];
     let mut rooms: Vec<Rect> = Vec::new();
     let mut rng = RandomNumberGenerator::new();
-    let mut enemies: Vec<Point> = Vec::new();
+    //let mut enemies: Vec<Point> = Vec::new();
+    let mut possible_spawns: Vec<Point> = Vec::new();
 
     let mut player_x = 0;
     let mut player_y = 0;
@@ -76,7 +77,7 @@ fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32, Vec<Point>) {
                 let prev_center = rooms[rooms.len()-1].center();
                 
                 // Enemie au centre des salles
-                enemies.push(Point::new(new_center.x, new_center.y));
+                possible_spawns.push(Point::new(new_center.x, new_center.y));
                 
                 let new_x = new_center.x;
                 let new_y = new_center.y;
@@ -93,6 +94,14 @@ fn new_map(map_depth: i32) -> (Vec<TileType>, i32, i32, Vec<Point>) {
             }
             rooms.push(new_room);
         }
+    }
+    
+    // Choisir 5 points de spawn d'ennemies
+    let mut enemies: Vec<Point> = Vec::new();
+    for _ in 0..5{
+        if possible_spawns.is_empty() {break;}
+        let idx = rng.range(0, possible_spawns.len() as i32) as usize;
+        enemies.push(possible_spawns.remove(idx));
     }
     
     let last_room_center = rooms[rooms.len() - 1].center();
@@ -153,21 +162,21 @@ impl GameState for State {
         
         let mut new_x = self.player_x;
         let mut new_y = self.player_y;
+        let mut player_moved = false; // Variable pour detecter mouvement du joueur
         
         //Gestion clavier
         if let Some(key) = ctx.key{
         //println!("Tecla presionada: {:?}", key);
             match key{
-                VirtualKeyCode::Left => new_x -= 1,
-                VirtualKeyCode::Right => new_x += 1,
-                VirtualKeyCode::Up => new_y -= 1,
-                VirtualKeyCode::Down => new_y += 1,
-                
-                // Action pour descendre l'escalier ou sortie
+                VirtualKeyCode::Left => { new_x -= 1; player_moved = true; },
+                VirtualKeyCode::Right => { new_x += 1; player_moved = true; },
+                VirtualKeyCode::Up => { new_y -= 1; player_moved = true; },
+                VirtualKeyCode::Down => { new_y += 1; player_moved = true; },
+                // Espace pour descendre l'escalier ou sortie
                 VirtualKeyCode::Space => {
                     let player_idx = xy_idx(self.player_x, self.player_y);
                     if self.map[player_idx] == TileType::Stairs {
-                        self.map_depth += 1; // On descend d'un niveau
+                        self.map_depth += 1; // Descendre d'un niveau
                         
                         // Générer la nouvelle carte
                         let (new_m, new_px, new_py, new_enemies) = new_map(self.map_depth);
@@ -186,33 +195,76 @@ impl GameState for State {
                 // Ignorer le rest
                 _ => {}
             }
-            //.clamp(min,max) assure que les limites des valeurs
-            new_x = new_x.clamp(0, 79);
-            new_y = new_y.clamp(0, 49);
             
-            // Collisions
-            let mut hit_enemy = false;
-            self.enemies.retain(|enemy| {
-                if enemy.x == new_x && enemy.y == new_y {
-                    hit_enemy = true;
-                    false // Supprimer enemie si collision
-                } else {
-                    true
-                }
-            });
+            //Detecter collision apres detecter mouvement du joueur
+            if player_moved {
+                //.clamp(min,max) assure que les limites des valeurs
+                new_x = new_x.clamp(0, 79);
+                new_y = new_y.clamp(0, 49);
+            
+                // Collisions
+                let mut hit_enemy = false;
+                self.enemies.retain(|enemy| {
+                    if enemy.x == new_x && enemy.y == new_y {
+                        hit_enemy = true;
+                        false // Supprimer enemie si collision
+                    } else {
+                        true
+                    }
+                });
 
-            if hit_enemy {
-                self.hp -= 1; // Perdre 1 hp
-            } else {
-                // Collisions avec murs
-                let destination_idx = xy_idx(new_x, new_y);
-                if self.map[destination_idx] != TileType::Wall {
-                    self.player_x = new_x;
-                    self.player_y = new_y;
+                if hit_enemy {
+                    self.hp -= 1; // Perdre 1 hp
+                } else {
+                    // Collisions avec murs
+                    let destination_idx = xy_idx(new_x, new_y);
+                    if self.map[destination_idx] != TileType::Wall {
+                        self.player_x = new_x;
+                        self.player_y = new_y;
+                    }
                 }
+                
+                // Tour ennemies
+                let mut next_enemies: Vec<Point> = Vec::new();
+                let mut rng = RandomNumberGenerator::new();
+                
+                for enemy in self.enemies.iter() {
+                    let mut e_x = enemy.x;
+                    let mut e_y = enemy.y;
+                    
+                    // Mouvement au hazard ennemi (0:Gauche, 1:Droite, 2:Haut, 3:Bas)
+                    let move_roll = rng.range(0, 5);
+                    match move_roll {
+                        0 => e_x -= 1,
+                        1 => e_x += 1,
+                        2 => e_y -= 1,
+                        3 => e_y += 1,
+                        _ => {}
+                    }
+                    
+                    //Definir limites
+                    e_x = e_x.clamp(0, 79);
+                    e_y = e_y.clamp(0, 49);
+                    
+                    let dest_idx = xy_idx(e_x, e_y);
+                    
+                    if self.map[dest_idx] != TileType::Wall {
+                        // Collision avec joueur
+                        if e_x == self.player_x && e_y == self.player_y {
+                            self.hp -= 1; 
+                            // Pas de "next_enemies", l'ennemi disparait
+                        } else {
+                            next_enemies.push(Point::new(e_x, e_y));
+                        }
+                    } else {
+                        // Si collision avec mur, ne pas bouger
+                        next_enemies.push(Point::new(enemy.x, enemy.y));
+                    }
+                }
+                self.enemies = next_enemies; // Mise a jour de la liste des ennemis
             }
+                
         }
-        
         
         
         //Dessiner carte
