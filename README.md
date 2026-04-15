@@ -41,8 +41,8 @@ If you don't have Rust installed, you can do so by following the official instru
 
 1. Clone this repository to your local machine:
    ```bash
-   git clone <url-de-tu-repositorio>
-   cd <nombre-de-tu-carpeta>
+   git clone https://github.com/Alpha-0401/Rust_Roguelike_project.git
+   cd Rust_Roguelike_project-main\src
    
 2. Compile and run the game directly with Cargo:
   ```bash
